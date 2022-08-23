@@ -15,7 +15,7 @@ OptionParser.new do |opts|
   opts.separator ''
   opts.separator 'Usage: main.rb [options]'
   opts.separator 'Example: bundle exec ruby main.rb -i /tmp/input_list.txt -o /tmp/output_list.txt'
-  opts.separator 'Example (gophish csv): bundle exec ruby main.rb -i /tmp/input_list.txt -f gophish -o /tmp/output_list.csv'
+  opts.separator 'Example (gophish csv and regex only): bundle exec ruby main.rb -i /tmp/input_list.txt -f gophish -o /tmp/output_list.csv -m regex'
   opts.separator ''
   opts.on("-i", "--input INPUT", "Input file (list) of unverified emails") do |input_file|
     options[:input_file] = input_file
@@ -25,6 +25,9 @@ OptionParser.new do |opts|
   end
   opts.on("-f", "--format FORMAT", "Select output format: gophish (csv),list (default)") do |output_format|
     options[:format] = output_format
+  end
+  opts.on("-m", "--method METHOD", "Select the validation method: regex (RFC 5322), mx, smtp (default)") do |method|
+    options[:method] = method
   end
   opts.on("-v", "--verbose", "Run verbosely") do |v|
     options[:verbose] = true
@@ -40,6 +43,9 @@ begin
   unless options[:output_file]
     puts '[!] missing output file'.red
     exit(1)
+  end
+  unless options[:method]
+    options[:method] = "smtp" # set smtp as the default option if not set
   end
 rescue => exception
   puts '[!] error while parsing options'.red
@@ -61,7 +67,16 @@ Truemail.configure do |config|
   config.verifier_email = 'verifier@example.com'
   config.verifier_domain = 'example.com'
   config.connection_attempts = 2
-  config.default_validation_type = :smtp
+  case options[:method]
+  when "smtp"
+    config.default_validation_type = :smtp
+  when "mx"
+    config.default_validation_type = :mx
+  when "regex"
+    config.default_validation_type = :regex
+  else # fallback if wrong method selected
+    config.default_validation_type = :smtp
+  end
   config.smtp_fail_fast = true
   config.smtp_safe_check = false
 end
@@ -70,7 +85,7 @@ end
 begin
   output_data = []
   input_data.each do |input_email|
-    truemail_return = Truemail.validate(input_email,  with: :smtp)
+    truemail_return = Truemail.validate(input_email)
     if truemail_return.result.success
       output_data << truemail_return.result.email
       puts "[+] #{truemail_return.result.email}".green
