@@ -3,19 +3,19 @@ require 'truemail'
 require 'colorize'
 require 'debug'
 require 'csv'
+require 'mail'
 
 options = {}
 
-ARGV << '-h' if ARGV.empty? # set -h if program is called without arguments
-
 # parsing option with gem
 
-OptionParser.new do |opts|
+op = OptionParser.new do |opts|
   opts.banner = "E-Mail list validator written in ruby using truemail gem"
   opts.separator ''
-  opts.separator 'Usage: main.rb [options]'
-  opts.separator 'Example: bundle exec ruby main.rb -i /tmp/input_list.txt -o /tmp/output_list.txt'
-  opts.separator 'Example (gophish csv and regex only): bundle exec ruby main.rb -i /tmp/input_list.txt -f gophish -o /tmp/output_list.csv -m regex'
+  opts.separator 'Usage: verify.rb [options]'
+  opts.separator 'Example: bundle exec ruby verify.rb -i /tmp/input_list.txt -o /tmp/output_list.txt'
+  opts.separator 'Example (gophish csv and regex only): bundle exec ruby verify.rb -i /tmp/input_list.txt -f gophish -o /tmp/output_list.csv -m regex'
+  opts.separator 'Example (using the pipe, no outfile): cat /tmp/mails.txt | bundle exec ruby verify.rb'
   opts.separator ''
   opts.on("-i", "--input INPUT", "Input file (list) of unverified emails") do |input_file|
     options[:input_file] = input_file
@@ -29,32 +29,35 @@ OptionParser.new do |opts|
   opts.on("-m", "--method METHOD", "Select the validation method: regex (RFC 5322), mx, smtp (default)") do |method|
     options[:method] = method
   end
+  opts.on("-dw", "--disable-wildcard", "Disable wildcard detection") do |v|
+    options[:disable_wildcard_detection] = true
+  end
   opts.on("-v", "--verbose", "Run verbosely") do |v|
     options[:verbose] = true
   end
-end.parse!
+end
+
+op.parse!
 
 # check if options are set (maybe there is a smoother solution with optionsparser but it will do the job)
-begin
-  unless options[:input_file]
-    puts '[!] missing input file'.red
-    exit(1)
-  end
-  unless options[:output_file]
-    puts '[!] missing output file'.red
-    exit(1)
-  end
-  unless options[:method]
-    options[:method] = "smtp" # set smtp as the default option if not set
-  end
-rescue => exception
-  puts '[!] error while parsing options'.red
-  exit(1)
+unless options[:method]
+  options[:method] = "smtp" # set smtp as the default option if not set
 end
+
 
 # reading the input file and split line by line
 begin
-  input_data = File.read(options[:input_file]).split
+  unless options[:input_file]
+    unless STDIN.tty? # check if pipe is present
+      input_data = ARGF.read.split
+    end
+    unless input_data
+      puts op.help
+      exit(0)
+    end
+  else
+    input_data = File.read(options[:input_file]).split
+  end
 rescue => exception
   puts '[!] error while reading input'.red
   puts exception
@@ -83,6 +86,23 @@ end
 
 # validating the emails line by line
 begin
+  unless options[:disable_wildcard_detection]
+    # collect all email domains of input_data
+    input_domains = []
+    input_data.each do |input_email|
+      input_domains << Mail::Address.new(input_email).domain
+    end
+    input_domains.uniq.each do |input_domain|
+      truemail_return = Truemail.validate("dlfAxs7TGR91OhmWCbDiqtpcwEEARRJf@#{input_domain}")
+      if options[:verbose]
+        puts "[*] Checking for wildcard on domain: #{input_domain}"
+        puts Hash[truemail_return.result.each_pair.to_a]
+      end
+      if truemail_return.result.success
+        puts "[!] Wildcard on domain #{input_domain} detected".red
+      end
+    end
+  end
   output_data = []
   input_data.each do |input_email|
     truemail_return = Truemail.validate(input_email)
@@ -102,24 +122,25 @@ rescue => exception
 end
 
 # writing data to output file
-begin
-  case options[:format]
-  when "gophish"
-    CSV.open(options[:output_file], "w") do |csv|
-      # writing the gophish default csv group template header
-      csv << ["First Name", "Last Name", "Email", "Position"]
-
-      output_data.each do |email|
-        csv << [nil,nil,email,nil]
+if options[:output_file]
+  begin
+    case options[:format]
+    when "gophish"
+      CSV.open(options[:output_file], "w") do |csv|
+        # writing the gophish default csv group template header
+        csv << ["First Name", "Last Name", "Email", "Position"]
+        output_data.each do |email|
+          csv << [nil,nil,email,nil]
+        end
       end
+      puts "[*] #{output_data.size} valid emails out of #{input_data.size} input emails were written to file: #{options[:output_file]} as gophish csv".white
+    else
+      File.open(options[:output_file], 'w') {|f|f.write output_data.join("\n")}
+      puts "[*] #{output_data.size} valid emails out of #{input_data.size} input emails were written to file: #{options[:output_file]} as list".white
     end
-    puts "[*] #{output_data.size} valid emails out of #{input_data.size} input emails were written to file: #{options[:output_file]} as gophish csv".white
-  else
-    File.open(options[:output_file], 'w') {|f|f.write output_data.join("\n")}
-    puts "[*] #{output_data.size} valid emails out of #{input_data.size} input emails were written to file: #{options[:output_file]} as list".white
+  rescue => exception
+    puts '[!] error while writing to output file'.red
+    puts exception
+    exit(1)
   end
-rescue => exception
-  puts '[!] error while writing to output file'.red
-  puts exception
-  exit(1)
 end
