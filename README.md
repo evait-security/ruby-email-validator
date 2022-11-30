@@ -15,7 +15,7 @@ bundle exec ruby verify.rb -i input_emails.txt -o verified_emails.csv -f gophish
 # regex validation only and csv gophish output
 bundle exec ruby verify.rb -i input_emails.txt -o verified_emails.csv -f gophish -m regex
 # using the pipe, no output file, only stdout
-cat /tmp/mails.txt | bundle exec ruby verify.rb'
+cat /tmp/mails.txt | bundle exec ruby verify.rb
 ```
 
 # Additional info
