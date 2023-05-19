@@ -13,19 +13,9 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v2
 
-    - name: Install TruffleRuby
-      run: |
-        curl -sSL https://github.com/oracle/truffleruby/releases/download/v21.2.0/truffleruby-21.2.0-linux-amd64.tar.gz | tar -xzf -
-        export PATH=$PWD/truffleruby-21.2.0-linux-amd64/bin:$PATH
-
-    - name: Install Bundler
-      run: gem install bundler
-
-    - name: Install Dependencies
-      run: bundle install
-
     - name: Compile Ruby Script
-      run: bundle exec truffleruby --compile verify.rb
+      uses: ruby/setup-ruby@v1
+      run: truffleruby --compile verify.rb
 
     - name: Get Commit Hash
       id: commit_hash
