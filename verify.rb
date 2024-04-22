@@ -29,7 +29,7 @@ op = OptionParser.new do |opts|
   opts.on("-m", "--method METHOD", "Select the validation method: regex (RFC 5322), mx, smtp (default)") do |method|
     options[:method] = method
   end
-  opts.on("-dw", "--disable-wildcard", "Disable wildcard detection") do |v|
+  opts.on("-d", "--disable-wildcard", "Disable wildcard detection") do |v|
     options[:disable_wildcard_detection] = true
   end
   opts.on("-v", "--verbose", "Run verbosely") do |v|
